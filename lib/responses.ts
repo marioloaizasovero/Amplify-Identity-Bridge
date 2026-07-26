@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildDummyResponse } from "@/lib/dummy-response";
+import { config } from "@/lib/config";
 
 export function dummyJson(endpoint: string) {
   return NextResponse.json(buildDummyResponse(endpoint));
@@ -18,4 +19,10 @@ export function dummyError(endpoint: string, status = 400) {
 
 export function dummyRedirect(path = "/") {
   return NextResponse.redirect(new URL(path, "http://localhost:3000"));
+}
+
+export function redirectToCognitoDebug(sessionId: string) {
+  const url = new URL("/cognito-debug", config.bridgeBaseUrl);
+  url.searchParams.set("session", sessionId);
+  return NextResponse.redirect(url);
 }
