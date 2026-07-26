@@ -1,6 +1,10 @@
 import { randomBytes } from "crypto";
 
 export function randomOpaqueToken(byteLength = 32) {
+  if (!Number.isSafeInteger(byteLength) || byteLength < 16) {
+    throw new Error("Token byte length must be an integer of at least 16");
+  }
+
   return randomBytes(byteLength).toString("base64url");
 }
 
@@ -18,10 +22,6 @@ export function createNonce() {
 
 export function createSessionId() {
   return randomOpaqueToken(24);
-}
-
-export function dummyHash(value: string) {
-  return `dummy-hash-${value}`;
 }
 
 export function nowEpochSeconds() {

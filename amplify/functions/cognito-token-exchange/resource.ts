@@ -1,17 +1,24 @@
 import { defineFunction, secret } from "@aws-amplify/backend";
 
+function requiredEnv(name: string) {
+  const value = process.env[name];
+
+  if (!value) {
+    throw new Error(`Missing required backend environment variable: ${name}`);
+  }
+
+  return value;
+}
+
 export const cognitoTokenExchange = defineFunction({
   name: "cognito-token-exchange",
   entry: "./handler.ts",
   timeoutSeconds: 10,
   environment: {
-    AWS_REGION: process.env.AWS_REGION ?? "us-east-1",
-    COGNITO_CLIENT_ID:
-      process.env.COGNITO_CLIENT_ID ?? "4lnjhfjhs73u5k1v72h9jk1rnr",
+    COGNITO_CLIENT_ID: requiredEnv("COGNITO_CLIENT_ID"),
     COGNITO_CLIENT_SECRET: secret("COGNITO_CLIENT_SECRET"),
-    COGNITO_DOMAIN:
-      process.env.COGNITO_DOMAIN ?? "https://loginstaging.toyota.cl",
-    COGNITO_USER_POOL_ID:
-      process.env.COGNITO_USER_POOL_ID ?? "us-east-1_LPM0238QU",
+    COGNITO_DOMAIN: requiredEnv("COGNITO_DOMAIN"),
+    COGNITO_REDIRECT_URI: requiredEnv("COGNITO_REDIRECT_URI"),
+    COGNITO_USER_POOL_ID: requiredEnv("COGNITO_USER_POOL_ID"),
   },
 });

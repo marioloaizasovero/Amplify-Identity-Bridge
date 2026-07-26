@@ -2,7 +2,6 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   DeleteCommand,
   DynamoDBDocumentClient,
-  GetCommand,
   PutCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { config } from "@/lib/config";
@@ -23,16 +22,50 @@ export type CognitoResult = {
   detail?: string;
 };
 
-const dynamo = DynamoDBDocumentClient.from(
-  new DynamoDBClient({
-    region: config.awsRegion,
-  }),
-  {
-    marshallOptions: {
-      removeUndefinedValues: true,
+let dynamo: DynamoDBDocumentClient | undefined;
+
+function getDynamoClient() {
+  dynamo ??= DynamoDBDocumentClient.from(
+    new DynamoDBClient({
+      region: config.awsRegion,
+    }),
+    {
+      marshallOptions: {
+        removeUndefinedValues: true,
+      },
     },
-  },
-);
+  );
+
+  return dynamo;
+}
+
+function isConditionalCheckFailure(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "ConditionalCheckFailedException"
+  );
+}
+
+function optionalString(value: unknown) {
+  return typeof value === "string" ? value : undefined;
+}
+
+function readClaims(value: unknown): CognitoClaims | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+
+  const claims = value as Record<string, unknown>;
+
+  return {
+    sub: optionalString(claims.sub),
+    email: optionalString(claims.email),
+    name: optionalString(claims.name),
+    username: optionalString(claims.username),
+  };
+}
 
 function getTableName() {
   return getBridgeStateTableName();
@@ -43,7 +76,7 @@ export async function saveOAuthState(input: {
   nonce: string;
   ttl: number;
 }) {
-  await dynamo.send(
+  await getDynamoClient().send(
     new PutCommand({
       TableName: getTableName(),
       Item: {
@@ -60,34 +93,42 @@ export async function saveOAuthState(input: {
 }
 
 export async function consumeOAuthState(state: string) {
-  const result = await dynamo.send(
-    new GetCommand({
-      TableName: getTableName(),
-      Key: {
-        pk: `state#${state}`,
-        sk: "oauth",
-      },
-    }),
-  );
+  try {
+    const result = await getDynamoClient().send(
+      new DeleteCommand({
+        TableName: getTableName(),
+        Key: {
+          pk: `state#${state}`,
+          sk: "oauth",
+        },
+        ConditionExpression: "#ttl > :now",
+        ExpressionAttributeNames: {
+          "#ttl": "ttl",
+        },
+        ExpressionAttributeValues: {
+          ":now": nowEpochSeconds(),
+        },
+        ReturnValues: "ALL_OLD",
+      }),
+    );
+    const nonce = optionalString(result.Attributes?.nonce);
+    const storedState = optionalString(result.Attributes?.state);
 
-  if (!result.Item) {
-    return null;
+    if (!nonce || storedState !== state) {
+      return null;
+    }
+
+    return {
+      nonce,
+      state: storedState,
+    };
+  } catch (error) {
+    if (isConditionalCheckFailure(error)) {
+      return null;
+    }
+
+    throw error;
   }
-
-  await dynamo.send(
-    new DeleteCommand({
-      TableName: getTableName(),
-      Key: {
-        pk: `state#${state}`,
-        sk: "oauth",
-      },
-    }),
-  );
-
-  return {
-    nonce: String(result.Item.nonce),
-    state: String(result.Item.state),
-  };
 }
 
 export async function saveCognitoResult(input: {
@@ -97,7 +138,7 @@ export async function saveCognitoResult(input: {
   detail?: string;
   ttl: number;
 }) {
-  await dynamo.send(
+  await getDynamoClient().send(
     new PutCommand({
       TableName: getTableName(),
       Item: {
@@ -114,28 +155,44 @@ export async function saveCognitoResult(input: {
   );
 }
 
-export async function getCognitoResult(sessionId: string) {
-  const result = await dynamo.send(
-    new GetCommand({
-      TableName: getTableName(),
-      Key: {
-        pk: `session#${sessionId}`,
-        sk: "cognito",
-      },
-    }),
-  );
+export async function consumeCognitoResult(sessionId: string) {
+  try {
+    const result = await getDynamoClient().send(
+      new DeleteCommand({
+        TableName: getTableName(),
+        Key: {
+          pk: `session#${sessionId}`,
+          sk: "cognito",
+        },
+        ConditionExpression: "#ttl > :now",
+        ExpressionAttributeNames: {
+          "#ttl": "ttl",
+        },
+        ExpressionAttributeValues: {
+          ":now": nowEpochSeconds(),
+        },
+        ReturnValues: "ALL_OLD",
+      }),
+    );
 
-  if (!result.Item) {
-    return null;
+    if (!result.Attributes || typeof result.Attributes.ok !== "boolean") {
+      return null;
+    }
+
+    return {
+      claims: readClaims(result.Attributes.claims),
+      createdAt: optionalString(result.Attributes.createdAt),
+      detail: optionalString(result.Attributes.detail),
+      error: optionalString(result.Attributes.error),
+      ok: result.Attributes.ok,
+    };
+  } catch (error) {
+    if (isConditionalCheckFailure(error)) {
+      return null;
+    }
+
+    throw error;
   }
-
-  return {
-    claims: result.Item.claims as CognitoClaims | undefined,
-    createdAt: result.Item.createdAt as string | undefined,
-    detail: result.Item.detail as string | undefined,
-    error: result.Item.error as string | undefined,
-    ok: Boolean(result.Item.ok),
-  };
 }
 
 export function getStateTtl() {

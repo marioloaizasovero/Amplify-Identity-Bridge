@@ -9,7 +9,10 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "$amplify/*": ["../.amplify/generated/*"]
+    }
   },
   "include": ["**/*.ts"]
 }

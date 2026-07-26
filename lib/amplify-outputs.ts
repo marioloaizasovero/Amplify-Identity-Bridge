@@ -1,42 +1,23 @@
-import { createRequire } from "module";
+import outputs from "@/amplify_outputs.json";
 
-type BridgeOutputs = {
-  custom?: {
-    bridgeStateTableName?: string;
-    cognitoTokenExchangeFunctionName?: string;
-  };
-};
+function requiredCustomOutput(
+  name:
+    | "bridgeStateTableName"
+    | "cognitoTokenExchangeFunctionName",
+) {
+  const value = outputs.custom?.[name];
 
-const require = createRequire(import.meta.url);
-
-function readOutputs(): BridgeOutputs {
-  try {
-    return require("../amplify_outputs.json") as BridgeOutputs;
-  } catch {
-    return {};
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`Missing required Amplify output: custom.${name}`);
   }
+
+  return value;
 }
 
 export function getBridgeStateTableName() {
-  const tableName =
-    readOutputs().custom?.bridgeStateTableName ??
-    process.env.BRIDGE_STATE_TABLE_NAME;
-
-  if (!tableName) {
-    throw new Error("Missing bridge state table name output.");
-  }
-
-  return tableName;
+  return requiredCustomOutput("bridgeStateTableName");
 }
 
 export function getCognitoTokenExchangeFunctionName() {
-  const functionName =
-    readOutputs().custom?.cognitoTokenExchangeFunctionName ??
-    process.env.COGNITO_TOKEN_EXCHANGE_FUNCTION_NAME;
-
-  if (!functionName) {
-    throw new Error("Missing Cognito token exchange function name output.");
-  }
-
-  return functionName;
+  return requiredCustomOutput("cognitoTokenExchangeFunctionName");
 }

@@ -25,7 +25,13 @@ type TokenResponse = {
 };
 
 function getIssuer() {
-  return `https://cognito-idp.${env.AWS_REGION}.amazonaws.com/${env.COGNITO_USER_POOL_ID}`;
+  const awsRegion = process.env.AWS_REGION;
+
+  if (!awsRegion) {
+    throw new Error("Missing Lambda runtime AWS_REGION.");
+  }
+
+  return `https://cognito-idp.${awsRegion}.amazonaws.com/${env.COGNITO_USER_POOL_ID}`;
 }
 
 function getSafeClaims(payload: JWTPayload): SafeClaims {
@@ -48,6 +54,13 @@ export const handler = async (event: TokenExchangeEvent) => {
     };
   }
 
+  if (event.redirectUri !== env.COGNITO_REDIRECT_URI) {
+    return {
+      ok: false,
+      error: "invalid_redirect_uri",
+    };
+  }
+
   try {
     const tokenResponse = await fetch(`${env.COGNITO_DOMAIN}/oauth2/token`, {
       method: "POST",
@@ -64,6 +77,7 @@ export const handler = async (event: TokenExchangeEvent) => {
         grant_type: "authorization_code",
         redirect_uri: event.redirectUri,
       }),
+      signal: AbortSignal.timeout(8_000),
     });
 
     const tokenPayload = (await tokenResponse.json()) as TokenResponse;

@@ -1,18 +1,21 @@
-import { getCognitoResult } from "@/lib/session-store";
+import { unstable_noStore as noStore } from "next/cache";
+import { cookies } from "next/headers";
+import { notFound } from "next/navigation";
+import { config } from "@/lib/config";
+import { getCognitoDebugSessionCookieName } from "@/lib/responses";
+import { consumeCognitoResult } from "@/lib/session-store";
 
 export const dynamic = "force-dynamic";
 
-type CognitoDebugPageProps = {
-  searchParams?: {
-    session?: string;
-  };
-};
+export default async function CognitoDebugPage() {
+  noStore();
 
-export default async function CognitoDebugPage({
-  searchParams,
-}: CognitoDebugPageProps) {
-  const sessionId = searchParams?.session;
-  const result = sessionId ? await getCognitoResult(sessionId) : null;
+  if (!config.enableCognitoDebug) {
+    notFound();
+  }
+
+  const sessionId = cookies().get(getCognitoDebugSessionCookieName())?.value;
+  const result = sessionId ? await consumeCognitoResult(sessionId) : null;
 
   return (
     <main className="page-shell">

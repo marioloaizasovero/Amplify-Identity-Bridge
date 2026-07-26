@@ -7,6 +7,10 @@
 node_modules/
 dist/
 .npm/
+.amplify/
+amplify_outputs*
+.env.production
+.env*.local
 
 # Compiled Java class files
 *.class
