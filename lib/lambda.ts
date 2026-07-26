@@ -1,18 +1,32 @@
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
-import { config } from "@/lib/config";
 import { getCognitoTokenExchangeFunctionName } from "@/lib/amplify-outputs";
+import { config } from "@/lib/config";
 import type { CognitoResult } from "@/lib/session-store";
 
-const lambda = new LambdaClient({
-  region: config.awsRegion,
-});
+let lambda: LambdaClient | undefined;
+
+function getLambdaClient() {
+  lambda ??= new LambdaClient({
+    region: config.awsRegion,
+  });
+
+  return lambda;
+}
+
+function isCognitoResult(value: unknown): value is CognitoResult {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { ok?: unknown }).ok === "boolean"
+  );
+}
 
 export async function invokeCognitoTokenExchange(input: {
   code: string;
   redirectUri: string;
   expectedNonce: string;
 }): Promise<CognitoResult> {
-  const response = await lambda.send(
+  const response = await getLambdaClient().send(
     new InvokeCommand({
       FunctionName: getCognitoTokenExchangeFunctionName(),
       InvocationType: "RequestResponse",
@@ -35,5 +49,16 @@ export async function invokeCognitoTokenExchange(input: {
     };
   }
 
-  return JSON.parse(Buffer.from(response.Payload).toString("utf-8"));
+  const result: unknown = JSON.parse(
+    Buffer.from(response.Payload).toString("utf-8"),
+  );
+
+  if (!isCognitoResult(result)) {
+    return {
+      ok: false,
+      error: "invalid_token_exchange_response",
+    };
+  }
+
+  return result;
 }
