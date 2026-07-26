@@ -1,21 +1,15 @@
 export const bridgeSessionCookieName = "toyota_vtex_bridge_session";
 
-export function getDummyBridgeSessionCookie() {
-  return "dummy-session-id";
-}
+export const bridgeSessionCookieOptions = {
+  httpOnly: true,
+  path: "/",
+  sameSite: "lax" as const,
+  secure: process.env.NODE_ENV === "production",
+};
 
-export function setDummyBridgeSessionCookie() {
+export function getBridgeSessionCookieOptions(maxAge: number) {
   return {
-    name: bridgeSessionCookieName,
-    value: "dummy-session-id",
-    mode: "dummy",
-  };
-}
-
-export function clearDummyBridgeSessionCookie() {
-  return {
-    name: bridgeSessionCookieName,
-    cleared: true,
-    mode: "dummy",
+    ...bridgeSessionCookieOptions,
+    maxAge,
   };
 }

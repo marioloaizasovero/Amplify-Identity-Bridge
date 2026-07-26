@@ -1,4 +1,4 @@
-import { randomBytes } from "crypto";
+import { createHash, randomBytes, timingSafeEqual } from "crypto";
 
 export function randomOpaqueToken(byteLength = 32) {
   if (!Number.isSafeInteger(byteLength) || byteLength < 16) {
@@ -22,6 +22,28 @@ export function createNonce() {
 
 export function createSessionId() {
   return randomOpaqueToken(24);
+}
+
+export function createAuthorizationCode() {
+  return randomOpaqueToken(64);
+}
+
+export function createAccessToken() {
+  return randomOpaqueToken(48);
+}
+
+export function hashOpaqueToken(token: string) {
+  return createHash("sha256").update(token, "utf8").digest("base64url");
+}
+
+export function secureStringEqual(actual: string, expected: string) {
+  const actualBuffer = Buffer.from(actual, "utf8");
+  const expectedBuffer = Buffer.from(expected, "utf8");
+
+  return (
+    actualBuffer.length === expectedBuffer.length &&
+    timingSafeEqual(actualBuffer, expectedBuffer)
+  );
 }
 
 export function nowEpochSeconds() {

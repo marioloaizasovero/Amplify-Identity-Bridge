@@ -1,5 +1,9 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { config } from "@/lib/config";
+import {
+  bridgeSessionCookieName,
+  getBridgeSessionCookieOptions,
+} from "@/lib/cookies";
 import { createSessionId } from "@/lib/crypto";
 import { invokeCognitoTokenExchange } from "@/lib/lambda";
 import { logError } from "@/lib/logger";
@@ -7,9 +11,11 @@ import { redirectToCognitoDebug } from "@/lib/responses";
 import {
   consumeOAuthState,
   getSessionTtl,
+  saveBridgeSession,
   saveCognitoResult,
   type CognitoClaims,
 } from "@/lib/session-store";
+import { buildVtexStoreLoginUrl } from "@/lib/vtex";
 
 export const dynamic = "force-dynamic";
 
@@ -19,9 +25,31 @@ async function saveAndRedirect(input: {
   detail?: string;
   error?: string;
 }) {
+  const ttl = getSessionTtl();
+
+  if (!input.error && input.claims) {
+    await saveBridgeSession({
+      claims: input.claims,
+      sessionId: input.sessionId,
+      ttl,
+    });
+  }
+
   if (!config.enableCognitoDebug) {
-    const path = input.error ? "/vtex/error" : "/vtex/callback";
-    return Response.redirect(new URL(path, config.bridgeBaseUrl));
+    const destination = input.error
+      ? new URL("/vtex/error", config.bridgeBaseUrl)
+      : buildVtexStoreLoginUrl();
+    const response = NextResponse.redirect(destination);
+
+    if (!input.error) {
+      response.cookies.set(
+        bridgeSessionCookieName,
+        input.sessionId,
+        getBridgeSessionCookieOptions(config.bridgeSessionTtlSeconds),
+      );
+    }
+
+    return response;
   }
 
   await saveCognitoResult({
@@ -29,10 +57,20 @@ async function saveAndRedirect(input: {
     detail: input.detail,
     error: input.error,
     sessionId: input.sessionId,
-    ttl: getSessionTtl(),
+    ttl,
   });
 
-  return redirectToCognitoDebug(input.sessionId);
+  const response = redirectToCognitoDebug(input.sessionId);
+
+  if (!input.error) {
+    response.cookies.set(
+      bridgeSessionCookieName,
+      input.sessionId,
+      getBridgeSessionCookieOptions(config.bridgeSessionTtlSeconds),
+    );
+  }
+
+  return response;
 }
 
 export async function GET(request: NextRequest) {
@@ -44,20 +82,19 @@ export async function GET(request: NextRequest) {
     const cognitoErrorDescription = url.searchParams.get("error_description");
     const sessionId = createSessionId();
 
-    if (!state) {
-      return saveAndRedirect({
-        error: "missing_state",
-        sessionId,
-      });
-    }
+    let expectedNonce: string | undefined;
 
-    const oauthState = await consumeOAuthState(state);
+    if (state) {
+      const oauthState = await consumeOAuthState(state);
 
-    if (!oauthState) {
-      return saveAndRedirect({
-        error: "invalid_or_expired_state",
-        sessionId,
-      });
+      if (!oauthState) {
+        return saveAndRedirect({
+          error: "invalid_or_expired_state",
+          sessionId,
+        });
+      }
+
+      expectedNonce = oauthState.nonce;
     }
 
     if (cognitoError) {
@@ -77,7 +114,7 @@ export async function GET(request: NextRequest) {
 
     const tokenExchangeResult = await invokeCognitoTokenExchange({
       code,
-      expectedNonce: oauthState.nonce,
+      expectedNonce,
       redirectUri: config.cognitoRedirectUri,
     });
 

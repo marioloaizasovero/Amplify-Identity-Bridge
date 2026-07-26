@@ -10,6 +10,7 @@ type TokenExchangeEvent = {
 type SafeClaims = {
   sub?: string;
   email?: string;
+  emailVerified?: boolean;
   name?: string;
   username?: string;
 };
@@ -38,6 +39,8 @@ function getSafeClaims(payload: JWTPayload): SafeClaims {
   return {
     sub: payload.sub,
     email: typeof payload.email === "string" ? payload.email : undefined,
+    emailVerified:
+      payload.email_verified === true || payload.email_verified === "true",
     name: typeof payload.name === "string" ? payload.name : undefined,
     username:
       typeof payload["cognito:username"] === "string"
@@ -47,7 +50,7 @@ function getSafeClaims(payload: JWTPayload): SafeClaims {
 }
 
 export const handler = async (event: TokenExchangeEvent) => {
-  if (!event.code || !event.redirectUri || !event.expectedNonce) {
+  if (!event.code || !event.redirectUri) {
     return {
       ok: false,
       error: "missing_token_exchange_input",
@@ -97,16 +100,39 @@ export const handler = async (event: TokenExchangeEvent) => {
       issuer,
     });
 
-    if (payload.nonce !== event.expectedNonce) {
+    if (payload.token_use !== "id") {
+      return {
+        ok: false,
+        error: "invalid_token_use",
+      };
+    }
+
+    if (event.expectedNonce && payload.nonce !== event.expectedNonce) {
       return {
         ok: false,
         error: "invalid_nonce",
       };
     }
 
+    const claims = getSafeClaims(payload);
+
+    if (!claims.sub || !claims.email) {
+      return {
+        ok: false,
+        error: "missing_required_claims",
+      };
+    }
+
+    if (!claims.emailVerified) {
+      return {
+        ok: false,
+        error: "email_not_verified",
+      };
+    }
+
     return {
       ok: true,
-      claims: getSafeClaims(payload),
+      claims,
       token: {
         expiresIn: tokenPayload.expires_in,
         tokenType: tokenPayload.token_type,

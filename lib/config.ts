@@ -22,6 +22,25 @@ function readUrlEnv(name: string, developmentFallback?: string) {
   }
 }
 
+function readPathEnv(name: string, developmentFallback: string) {
+  const value =
+    process.env[name] ??
+    (isProduction ? undefined : developmentFallback);
+
+  if (
+    !value ||
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    value.includes("\\")
+  ) {
+    throw new Error(
+      `Invalid path environment variable: ${name} must be a relative path starting with /.`,
+    );
+  }
+
+  return value;
+}
+
 function readIntegerEnv(
   name: string,
   developmentFallback: number,
@@ -80,7 +99,7 @@ export const config = {
   ),
   cognitoScopes: readEnv(
     "COGNITO_SCOPES",
-    "openid email profile aws.cognito.signin.user.admin",
+    "aws.cognito.signin.user.admin email openid",
   ),
   cognitoStateTtlSeconds: readIntegerEnv(
     "COGNITO_STATE_TTL_SECONDS",
@@ -97,8 +116,21 @@ export const config = {
     process.env.NODE_ENV !== "production",
   ),
   vtexClientId: readEnv("VTEX_CLIENT_ID", "dummy-vtex-client-id"),
+  vtexClientSecret: readEnv(
+    "VTEX_CLIENT_SECRET",
+    "dummy-vtex-client-secret",
+  ),
   vtexAllowedRedirectUri: readUrlEnv(
     "VTEX_ALLOWED_REDIRECT_URI",
     "https://dummy-vtex.example.com/callback",
   ),
+  vtexStoreLoginUrl: readUrlEnv(
+    "VTEX_STORE_LOGIN_URL",
+    "http://localhost:3000/login",
+  ),
+  vtexOAuthProvider: readEnv(
+    "VTEX_OAUTH_PROVIDER",
+    "ToyotaSSO",
+  ),
+  vtexReturnUrl: readPathEnv("VTEX_RETURN_URL", "/"),
 };

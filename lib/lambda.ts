@@ -14,17 +14,35 @@ function getLambdaClient() {
 }
 
 function isCognitoResult(value: unknown): value is CognitoResult {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const result = value as {
+    ok?: unknown;
+    claims?: {
+      sub?: unknown;
+      email?: unknown;
+      emailVerified?: unknown;
+    };
+  };
+
+  if (result.ok === false) {
+    return true;
+  }
+
   return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as { ok?: unknown }).ok === "boolean"
+    result.ok === true &&
+    typeof result.claims?.sub === "string" &&
+    typeof result.claims.email === "string" &&
+    result.claims.emailVerified === true
   );
 }
 
 export async function invokeCognitoTokenExchange(input: {
   code: string;
   redirectUri: string;
-  expectedNonce: string;
+  expectedNonce?: string;
 }): Promise<CognitoResult> {
   const response = await getLambdaClient().send(
     new InvokeCommand({
