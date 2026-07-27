@@ -3,12 +3,13 @@ backend:
   phases:
     build:
       commands:
-        - npm ci --cache .npm --prefer-offline
+        - npm install --include=optional --no-audit --cache .npm --prefer-offline
         - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
 frontend:
   phases:
     build:
       commands:
+        - env | grep -e AWS_REGION -e BRIDGE_BASE_URL -e COGNITO_DOMAIN -e COGNITO_USER_POOL_ID -e COGNITO_CLIENT_ID -e COGNITO_REDIRECT_URI -e COGNITO_SCOPES -e COGNITO_STATE_TTL_SECONDS -e BRIDGE_SESSION_TTL_SECONDS -e ENABLE_COGNITO_DEBUG -e VTEX_CLIENT_ID -e VTEX_CLIENT_SECRET -e VTEX_ALLOWED_REDIRECT_URI -e VTEX_STORE_LOGIN_URL -e VTEX_OAUTH_PROVIDER -e VTEX_RETURN_URL > .env.production
         - npm run build
   artifacts:
     baseDirectory: .next
@@ -18,4 +19,3 @@ frontend:
     paths:
       - .next/cache/**/*
       - .npm/**/*
-      - node_modules/**/*

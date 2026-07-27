@@ -65,3 +65,28 @@ body {
     monospace;
   font-size: 0.92rem;
 }
+
+.debug-list {
+  margin: 20px 0 0;
+}
+
+.debug-list div {
+  border-top: 1px solid var(--border);
+  padding: 12px 0;
+}
+
+.debug-list dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.debug-list dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-family:
+    Consolas,
+    "Courier New",
+    monospace;
+}

@@ -1,27 +1,32 @@
+import { config } from "@/lib/config";
+
 export function getDummyCognitoConfig() {
   return {
     provider: "cognito",
-    mode: "dummy",
+    mode: "real-authorize-dummy-vtex",
   };
+}
+
+export function buildCognitoAuthorizeUrl(input: {
+  state: string;
+  nonce: string;
+}) {
+  const authorizeUrl = new URL("/oauth2/authorize", config.cognitoDomain);
+
+  authorizeUrl.searchParams.set("client_id", config.cognitoClientId);
+  authorizeUrl.searchParams.set("redirect_uri", config.cognitoRedirectUri);
+  authorizeUrl.searchParams.set("response_type", "code");
+  authorizeUrl.searchParams.set("scope", config.cognitoScopes);
+  authorizeUrl.searchParams.set("state", input.state);
+  authorizeUrl.searchParams.set("nonce", input.nonce);
+  authorizeUrl.searchParams.set("prompt", "none");
+
+  return authorizeUrl;
 }
 
 export function buildDummyCognitoAuthorizeUrl() {
-  return new URL("https://dummy-cognito.example.com/oauth2/authorize");
-}
-
-export async function exchangeDummyCognitoCode(code: string) {
-  return {
-    access_token: `dummy-cognito-access-token-${code}`,
-    id_token: `dummy-cognito-id-token-${code}`,
-    token_type: "Bearer",
-    expires_in: 3600,
-  };
-}
-
-export async function verifyDummyCognitoIdToken() {
-  return {
-    sub: "dummy-cognito-user",
-    email: "dummy@example.com",
-    name: "Dummy User",
-  };
+  return buildCognitoAuthorizeUrl({
+    nonce: "dummy-nonce",
+    state: "dummy-state",
+  });
 }
