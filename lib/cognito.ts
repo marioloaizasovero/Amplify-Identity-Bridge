@@ -1,12 +1,5 @@
 import { config } from "@/lib/config";
 
-export function getDummyCognitoConfig() {
-  return {
-    provider: "cognito",
-    mode: "real-authorize-dummy-vtex",
-  };
-}
-
 export function buildCognitoAuthorizeUrl(input: {
   state: string;
   nonce: string;
@@ -22,11 +15,4 @@ export function buildCognitoAuthorizeUrl(input: {
   authorizeUrl.searchParams.set("prompt", "none");
 
   return authorizeUrl;
-}
-
-export function buildDummyCognitoAuthorizeUrl() {
-  return buildCognitoAuthorizeUrl({
-    nonce: "dummy-nonce",
-    state: "dummy-state",
-  });
 }
