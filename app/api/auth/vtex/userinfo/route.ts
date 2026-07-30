@@ -78,6 +78,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(userInfo, {
       headers: {
         "Cache-Control": "no-store",
+        "X-Correlation-Id": correlationId,
       },
     });
   } catch (error) {

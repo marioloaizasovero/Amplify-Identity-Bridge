@@ -29,6 +29,33 @@ export type CognitoResult = {
   };
 };
 
+export type VtexSimulatorStage = {
+  name: string;
+  status: "success" | "error";
+  durationMs?: number;
+  detail?: string;
+};
+
+export type VtexSimulatorResult = {
+  ok: boolean;
+  correlationId?: string;
+  provider?: string;
+  returnUrl?: string;
+  error?: string;
+  detail?: string;
+  token?: {
+    expiresIn?: number;
+    httpStatus?: number;
+    tokenType?: string;
+  };
+  userInfo?: {
+    userId?: string;
+    email?: string;
+    name?: string;
+  };
+  stages: VtexSimulatorStage[];
+};
+
 let dynamo: DynamoDBDocumentClient | undefined;
 
 function getDynamoClient() {
@@ -80,6 +107,75 @@ function readClaims(value: unknown): CognitoClaims | undefined {
     emailVerified: optionalBoolean(claims.emailVerified),
     name: optionalString(claims.name),
     username: optionalString(claims.username),
+  };
+}
+
+function readSimulatorStages(value: unknown): VtexSimulatorStage[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    if (
+      typeof item !== "object" ||
+      item === null ||
+      typeof item.name !== "string" ||
+      (item.status !== "success" && item.status !== "error")
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        name: item.name,
+        status: item.status,
+        durationMs: optionalNumber(item.durationMs),
+        detail: optionalString(item.detail),
+      },
+    ];
+  });
+}
+
+function readSimulatorResult(
+  value: Record<string, unknown>,
+): VtexSimulatorResult | null {
+  if (typeof value.ok !== "boolean") {
+    return null;
+  }
+
+  const tokenValue =
+    typeof value.token === "object" && value.token !== null
+      ? (value.token as Record<string, unknown>)
+      : undefined;
+  const userInfoValue =
+    typeof value.userInfo === "object" && value.userInfo !== null
+      ? (value.userInfo as Record<string, unknown>)
+      : undefined;
+  const token = tokenValue
+      ? {
+          expiresIn: optionalNumber(tokenValue.expiresIn),
+          httpStatus: optionalNumber(tokenValue.httpStatus),
+          tokenType: optionalString(tokenValue.tokenType),
+        }
+      : undefined;
+  const userInfo = userInfoValue
+      ? {
+          userId: optionalString(userInfoValue.userId),
+          email: optionalString(userInfoValue.email),
+          name: optionalString(userInfoValue.name),
+        }
+      : undefined;
+
+  return {
+    ok: value.ok,
+    correlationId: optionalString(value.correlationId),
+    provider: optionalString(value.provider),
+    returnUrl: optionalString(value.returnUrl),
+    error: optionalString(value.error),
+    detail: optionalString(value.detail),
+    token,
+    userInfo,
+    stages: readSimulatorStages(value.stages),
   };
 }
 
@@ -412,4 +508,104 @@ export async function getVtexAccessToken(tokenHash: string) {
   const correlationId = optionalString(result.Item?.correlationId);
 
   return claims && correlationId ? { claims, correlationId } : null;
+}
+
+export async function saveVtexSimulatorState(input: {
+  stateHash: string;
+  sessionId: string;
+  provider: string;
+  returnUrl: string;
+  ttl: number;
+}) {
+  await getDynamoClient().send(
+    new PutCommand({
+      TableName: getTableName(),
+      Item: {
+        pk: `vtex-simulator-state#${input.stateHash}`,
+        sk: "state",
+        sessionId: input.sessionId,
+        provider: input.provider,
+        returnUrl: input.returnUrl,
+        ttl: input.ttl,
+        createdAt: new Date().toISOString(),
+      },
+      ConditionExpression: "attribute_not_exists(pk)",
+    }),
+  );
+}
+
+export async function consumeVtexSimulatorState(stateHash: string) {
+  try {
+    const result = await getDynamoClient().send(
+      new DeleteCommand({
+        TableName: getTableName(),
+        Key: {
+          pk: `vtex-simulator-state#${stateHash}`,
+          sk: "state",
+        },
+        ConditionExpression: "#ttl > :now",
+        ExpressionAttributeNames: {
+          "#ttl": "ttl",
+        },
+        ExpressionAttributeValues: {
+          ":now": nowEpochSeconds(),
+        },
+        ReturnValues: "ALL_OLD",
+      }),
+    );
+
+    const sessionId = optionalString(result.Attributes?.sessionId);
+    const provider = optionalString(result.Attributes?.provider);
+    const returnUrl = optionalString(result.Attributes?.returnUrl);
+
+    return sessionId && provider && returnUrl
+      ? { sessionId, provider, returnUrl }
+      : null;
+  } catch (error) {
+    if (isConditionalCheckFailure(error)) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+export async function saveVtexSimulatorResult(input: {
+  sessionId: string;
+  result: VtexSimulatorResult;
+  ttl: number;
+}) {
+  await getDynamoClient().send(
+    new PutCommand({
+      TableName: getTableName(),
+      Item: {
+        pk: `vtex-simulator-result#${input.sessionId}`,
+        sk: "result",
+        ...input.result,
+        ttl: input.ttl,
+        createdAt: new Date().toISOString(),
+      },
+    }),
+  );
+}
+
+export async function getVtexSimulatorResult(sessionId: string) {
+  const result = await getDynamoClient().send(
+    new GetCommand({
+      TableName: getTableName(),
+      Key: {
+        pk: `vtex-simulator-result#${sessionId}`,
+        sk: "result",
+      },
+      ConsistentRead: true,
+    }),
+  );
+  const ttl =
+    typeof result.Item?.ttl === "number" ? result.Item.ttl : undefined;
+
+  if (!result.Item || !ttl || ttl <= nowEpochSeconds()) {
+    return null;
+  }
+
+  return readSimulatorResult(result.Item);
 }
