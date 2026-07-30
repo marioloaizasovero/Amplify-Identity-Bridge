@@ -22,6 +22,11 @@ export type CognitoResult = {
   claims?: CognitoClaims;
   error?: string;
   detail?: string;
+  diagnostics?: {
+    lambdaRequestId?: string;
+    tokenExpiresIn?: number;
+    tokenType?: string;
+  };
 };
 
 let dynamo: DynamoDBDocumentClient | undefined;
@@ -58,6 +63,10 @@ function optionalBoolean(value: unknown) {
   return typeof value === "boolean" ? value : undefined;
 }
 
+function optionalNumber(value: unknown) {
+  return typeof value === "number" ? value : undefined;
+}
+
 function readClaims(value: unknown): CognitoClaims | undefined {
   if (typeof value !== "object" || value === null) {
     return undefined;
@@ -79,6 +88,7 @@ function getTableName() {
 }
 
 export async function saveOAuthState(input: {
+  correlationId: string;
   state: string;
   nonce: string;
   ttl: number;
@@ -89,6 +99,7 @@ export async function saveOAuthState(input: {
       Item: {
         pk: `state#${input.state}`,
         sk: "oauth",
+        correlationId: input.correlationId,
         state: input.state,
         nonce: input.nonce,
         ttl: input.ttl,
@@ -120,12 +131,14 @@ export async function consumeOAuthState(state: string) {
     );
     const nonce = optionalString(result.Attributes?.nonce);
     const storedState = optionalString(result.Attributes?.state);
+    const correlationId = optionalString(result.Attributes?.correlationId);
 
-    if (!nonce || storedState !== state) {
+    if (!nonce || !correlationId || storedState !== state) {
       return null;
     }
 
     return {
+      correlationId,
       nonce,
       state: storedState,
     };
@@ -140,9 +153,12 @@ export async function consumeOAuthState(state: string) {
 
 export async function saveCognitoResult(input: {
   sessionId: string;
+  correlationId: string;
   claims?: CognitoClaims;
   error?: string;
   detail?: string;
+  diagnostics?: CognitoResult["diagnostics"];
+  stage: string;
   ttl: number;
 }) {
   await getDynamoClient().send(
@@ -152,9 +168,12 @@ export async function saveCognitoResult(input: {
         pk: `session#${input.sessionId}`,
         sk: "cognito",
         claims: input.claims,
+        correlationId: input.correlationId,
         detail: input.detail,
+        diagnostics: input.diagnostics,
         error: input.error,
         ok: !input.error,
+        stage: input.stage,
         ttl: input.ttl,
         createdAt: new Date().toISOString(),
       },
@@ -188,10 +207,27 @@ export async function consumeCognitoResult(sessionId: string) {
 
     return {
       claims: readClaims(result.Attributes.claims),
+      correlationId: optionalString(result.Attributes.correlationId),
       createdAt: optionalString(result.Attributes.createdAt),
       detail: optionalString(result.Attributes.detail),
+      diagnostics:
+        typeof result.Attributes.diagnostics === "object" &&
+        result.Attributes.diagnostics !== null
+          ? {
+              lambdaRequestId: optionalString(
+                result.Attributes.diagnostics.lambdaRequestId,
+              ),
+              tokenExpiresIn: optionalNumber(
+                result.Attributes.diagnostics.tokenExpiresIn,
+              ),
+              tokenType: optionalString(
+                result.Attributes.diagnostics.tokenType,
+              ),
+            }
+          : undefined,
       error: optionalString(result.Attributes.error),
       ok: result.Attributes.ok,
+      stage: optionalString(result.Attributes.stage),
     };
   } catch (error) {
     if (isConditionalCheckFailure(error)) {
@@ -212,6 +248,7 @@ export function getSessionTtl() {
 
 export async function saveBridgeSession(input: {
   sessionId: string;
+  correlationId: string;
   claims: CognitoClaims;
   ttl: number;
 }) {
@@ -222,6 +259,7 @@ export async function saveBridgeSession(input: {
         pk: `bridge-session#${input.sessionId}`,
         sk: "session",
         claims: input.claims,
+        correlationId: input.correlationId,
         ttl: input.ttl,
         createdAt: new Date().toISOString(),
       },
@@ -250,7 +288,10 @@ export async function consumeBridgeSession(sessionId: string) {
       }),
     );
 
-    return readClaims(result.Attributes?.claims);
+    const claims = readClaims(result.Attributes?.claims);
+    const correlationId = optionalString(result.Attributes?.correlationId);
+
+    return claims && correlationId ? { claims, correlationId } : null;
   } catch (error) {
     if (isConditionalCheckFailure(error)) {
       return null;
@@ -263,6 +304,7 @@ export async function consumeBridgeSession(sessionId: string) {
 export async function saveVtexAuthorizationCode(input: {
   codeHash: string;
   clientId: string;
+  correlationId: string;
   redirectUri: string;
   claims: CognitoClaims;
   ttl: number;
@@ -274,6 +316,7 @@ export async function saveVtexAuthorizationCode(input: {
         pk: `vtex-code#${input.codeHash}`,
         sk: "authorization-code",
         clientId: input.clientId,
+        correlationId: input.correlationId,
         redirectUri: input.redirectUri,
         claims: input.claims,
         ttl: input.ttl,
@@ -311,7 +354,10 @@ export async function consumeVtexAuthorizationCode(input: {
       }),
     );
 
-    return readClaims(result.Attributes?.claims);
+    const claims = readClaims(result.Attributes?.claims);
+    const correlationId = optionalString(result.Attributes?.correlationId);
+
+    return claims && correlationId ? { claims, correlationId } : null;
   } catch (error) {
     if (isConditionalCheckFailure(error)) {
       return null;
@@ -323,6 +369,7 @@ export async function consumeVtexAuthorizationCode(input: {
 
 export async function saveVtexAccessToken(input: {
   tokenHash: string;
+  correlationId: string;
   claims: CognitoClaims;
   ttl: number;
 }) {
@@ -333,6 +380,7 @@ export async function saveVtexAccessToken(input: {
         pk: `vtex-token#${input.tokenHash}`,
         sk: "access-token",
         claims: input.claims,
+        correlationId: input.correlationId,
         ttl: input.ttl,
         createdAt: new Date().toISOString(),
       },
@@ -360,5 +408,8 @@ export async function getVtexAccessToken(tokenHash: string) {
     return null;
   }
 
-  return readClaims(result.Item?.claims);
+  const claims = readClaims(result.Item?.claims);
+  const correlationId = optionalString(result.Item?.correlationId);
+
+  return claims && correlationId ? { claims, correlationId } : null;
 }

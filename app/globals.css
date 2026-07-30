@@ -30,7 +30,7 @@ body {
 }
 
 .status-panel {
-  width: min(100%, 560px);
+  width: min(100%, 720px);
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;

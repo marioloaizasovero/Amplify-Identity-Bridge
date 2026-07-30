@@ -20,6 +20,10 @@ export function createSessionId() {
   return randomOpaqueToken(24);
 }
 
+export function createCorrelationId() {
+  return randomBytes(16).toString("hex");
+}
+
 export function createAuthorizationCode() {
   return randomOpaqueToken(64);
 }

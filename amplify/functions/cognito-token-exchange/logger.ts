@@ -1,6 +1,5 @@
-import { config, type LogLevel } from "@/lib/config";
-
-export type LogContext = Record<string, unknown>;
+type LogLevel = "error" | "warn" | "info" | "debug";
+type LogContext = Record<string, unknown>;
 
 const priorities: Record<LogLevel, number> = {
   error: 0,
@@ -9,8 +8,15 @@ const priorities: Record<LogLevel, number> = {
   debug: 3,
 };
 
-function shouldLog(level: LogLevel) {
-  return priorities[level] <= priorities[config.logLevel];
+function configuredLogLevel(): LogLevel {
+  const value = process.env.LOG_LEVEL?.trim().toLowerCase();
+
+  return value === "error" ||
+    value === "warn" ||
+    value === "info" ||
+    value === "debug"
+    ? value
+    : "info";
 }
 
 function writeLog(
@@ -18,14 +24,14 @@ function writeLog(
   message: string,
   context: LogContext = {},
 ) {
-  if (!shouldLog(level)) {
+  if (priorities[level] > priorities[configuredLogLevel()]) {
     return;
   }
 
   const entry = JSON.stringify({
     timestamp: new Date().toISOString(),
     level,
-    service: "identity-bridge",
+    service: "cognito-token-exchange",
     message,
     ...context,
   });
@@ -56,17 +62,13 @@ export function logError(
   error: unknown,
   context: LogContext = {},
 ) {
-  const details =
-    error instanceof Error
-      ? {
-          errorName: error.name,
-          errorMessage: error.message,
-          stack: config.logLevel === "debug" ? error.stack : undefined,
-        }
-      : { errorMessage: String(error) };
-
   writeLog("error", message, {
     ...context,
-    ...details,
+    errorName: error instanceof Error ? error.name : undefined,
+    errorMessage: error instanceof Error ? error.message : String(error),
+    stack:
+      configuredLogLevel() === "debug" && error instanceof Error
+        ? error.stack
+        : undefined,
   });
 }
