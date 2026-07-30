@@ -82,6 +82,25 @@ function readBooleanEnv(name: string, fallback: boolean) {
   throw new Error(`Invalid boolean environment variable: ${name}`);
 }
 
+export type LogLevel = "error" | "warn" | "info" | "debug";
+
+function readLogLevelEnv(name: string, fallback: LogLevel): LogLevel {
+  const value = process.env[name]?.trim().toLowerCase() ?? fallback;
+
+  if (
+    value !== "error" &&
+    value !== "warn" &&
+    value !== "info" &&
+    value !== "debug"
+  ) {
+    throw new Error(
+      `Invalid log level environment variable: ${name} must be error, warn, info or debug.`,
+    );
+  }
+
+  return value;
+}
+
 export const config = {
   awsRegion: readEnv("AWS_REGION"),
   bridgeBaseUrl: readUrlEnv("BRIDGE_BASE_URL", "http://localhost:3000"),
@@ -115,6 +134,7 @@ export const config = {
     "ENABLE_COGNITO_DEBUG",
     process.env.NODE_ENV !== "production",
   ),
+  logLevel: readLogLevelEnv("LOG_LEVEL", "info"),
   vtexClientId: readEnv("VTEX_CLIENT_ID", "dummy-vtex-client-id"),
   vtexClientSecret: readEnv(
     "VTEX_CLIENT_SECRET",

@@ -10,6 +10,18 @@ function requiredEnv(name: string) {
   return value;
 }
 
+function logLevelEnv() {
+  const value = process.env.LOG_LEVEL?.trim().toLowerCase() ?? "info";
+
+  if (!["error", "warn", "info", "debug"].includes(value)) {
+    throw new Error(
+      "Invalid backend environment variable: LOG_LEVEL must be error, warn, info or debug.",
+    );
+  }
+
+  return value;
+}
+
 export const cognitoTokenExchange = defineFunction({
   name: "cognito-token-exchange",
   entry: "./handler.ts",
@@ -20,5 +32,6 @@ export const cognitoTokenExchange = defineFunction({
     COGNITO_DOMAIN: requiredEnv("COGNITO_DOMAIN"),
     COGNITO_REDIRECT_URI: requiredEnv("COGNITO_REDIRECT_URI"),
     COGNITO_USER_POOL_ID: requiredEnv("COGNITO_USER_POOL_ID"),
+    LOG_LEVEL: logLevelEnv(),
   },
 });
