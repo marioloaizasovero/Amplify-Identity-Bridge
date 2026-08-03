@@ -8,6 +8,8 @@ export default function HomePage() {
           <li>/api/auth/cognito/callback</li>
           <li>/cognito-debug</li>
           <li>/vtex/error</li>
+          <li>/vtex-simulator/login</li>
+          <li>/vtex-simulator/result</li>
           <li>/api/auth/vtex/authorize</li>
           <li>/api/auth/vtex/token</li>
           <li>/api/auth/vtex/userinfo</li>
