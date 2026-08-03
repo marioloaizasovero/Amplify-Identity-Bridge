@@ -134,6 +134,7 @@ export const config = {
     "ENABLE_COGNITO_DEBUG",
     process.env.NODE_ENV !== "production",
   ),
+  enableVtexSimulator: readBooleanEnv("ENABLE_VTEX_SIMULATOR", false),
   logLevel: readLogLevelEnv("LOG_LEVEL", "info"),
   vtexClientId: readEnv("VTEX_CLIENT_ID", "dummy-vtex-client-id"),
   vtexClientSecret: readEnv(

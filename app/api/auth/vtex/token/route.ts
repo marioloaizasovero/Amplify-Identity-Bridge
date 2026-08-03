@@ -160,6 +160,7 @@ export async function POST(request: NextRequest) {
         headers: {
           "Cache-Control": "no-store",
           Pragma: "no-cache",
+          "X-Correlation-Id": correlationId,
         },
       },
     );
