@@ -7,7 +7,8 @@ export default function HomePage() {
         <ul className="endpoint-list">
           <li>/api/auth/cognito/start</li>
           <li>/cognito-debug</li>
-          <li>/vtex</li>
+          <li>/vtex-simulator/login</li>
+          <li>/vtex-simulator/result</li>
           <li>/api/auth/vtex/authorize</li>
           <li>/api/auth/vtex/token</li>
           <li>/api/auth/vtex/userinfo</li>
