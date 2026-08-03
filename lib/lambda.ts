@@ -43,7 +43,6 @@ export async function invokeCognitoTokenExchange(input: {
   code: string;
   correlationId: string;
   redirectUri: string;
-  expectedNonce?: string;
 }): Promise<CognitoResult> {
   const response = await getLambdaClient().send(
     new InvokeCommand({

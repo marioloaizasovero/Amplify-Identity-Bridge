@@ -25,7 +25,7 @@ function logLevelEnv() {
 export const cognitoTokenExchange = defineFunction({
   name: "cognito-token-exchange",
   entry: "./handler.ts",
-  timeoutSeconds: 10,
+  timeoutSeconds: 15,
   environment: {
     COGNITO_CLIENT_ID: requiredEnv("COGNITO_CLIENT_ID"),
     COGNITO_CLIENT_SECRET: secret("COGNITO_CLIENT_SECRET"),

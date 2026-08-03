@@ -5,8 +5,9 @@ export default function HomePage() {
         <h1>Hola mundo</h1>
         <p>Scaffold inicial del Toyota VTEX Identity Bridge sobre Amplify Gen 2.</p>
         <ul className="endpoint-list">
-          <li>/api/auth/cognito/start</li>
+          <li>/api/auth/cognito/callback</li>
           <li>/cognito-debug</li>
+          <li>/vtex/error</li>
           <li>/vtex-simulator/login</li>
           <li>/vtex-simulator/result</li>
           <li>/api/auth/vtex/authorize</li>

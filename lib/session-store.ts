@@ -183,70 +183,6 @@ function getTableName() {
   return getBridgeStateTableName();
 }
 
-export async function saveOAuthState(input: {
-  correlationId: string;
-  state: string;
-  nonce: string;
-  ttl: number;
-}) {
-  await getDynamoClient().send(
-    new PutCommand({
-      TableName: getTableName(),
-      Item: {
-        pk: `state#${input.state}`,
-        sk: "oauth",
-        correlationId: input.correlationId,
-        state: input.state,
-        nonce: input.nonce,
-        ttl: input.ttl,
-        createdAt: new Date().toISOString(),
-      },
-      ConditionExpression: "attribute_not_exists(pk)",
-    }),
-  );
-}
-
-export async function consumeOAuthState(state: string) {
-  try {
-    const result = await getDynamoClient().send(
-      new DeleteCommand({
-        TableName: getTableName(),
-        Key: {
-          pk: `state#${state}`,
-          sk: "oauth",
-        },
-        ConditionExpression: "#ttl > :now",
-        ExpressionAttributeNames: {
-          "#ttl": "ttl",
-        },
-        ExpressionAttributeValues: {
-          ":now": nowEpochSeconds(),
-        },
-        ReturnValues: "ALL_OLD",
-      }),
-    );
-    const nonce = optionalString(result.Attributes?.nonce);
-    const storedState = optionalString(result.Attributes?.state);
-    const correlationId = optionalString(result.Attributes?.correlationId);
-
-    if (!nonce || !correlationId || storedState !== state) {
-      return null;
-    }
-
-    return {
-      correlationId,
-      nonce,
-      state: storedState,
-    };
-  } catch (error) {
-    if (isConditionalCheckFailure(error)) {
-      return null;
-    }
-
-    throw error;
-  }
-}
-
 export async function saveCognitoResult(input: {
   sessionId: string;
   correlationId: string;
@@ -332,10 +268,6 @@ export async function consumeCognitoResult(sessionId: string) {
 
     throw error;
   }
-}
-
-export function getStateTtl() {
-  return nowEpochSeconds() + config.cognitoStateTtlSeconds;
 }
 
 export function getSessionTtl() {
