@@ -9,7 +9,6 @@ import { invokeCognitoTokenExchange } from "@/lib/lambda";
 import { logDebug, logError, logInfo, logWarn } from "@/lib/logger";
 import { redirectToCognitoDebug } from "@/lib/responses";
 import {
-  consumeOAuthState,
   getSessionTtl,
   saveBridgeSession,
   saveCognitoResult,
@@ -86,54 +85,22 @@ async function saveAndRedirect(input: {
 
 export async function GET(request: NextRequest) {
   const startedAt = Date.now();
-  let correlationId = createCorrelationId();
+  const correlationId = createCorrelationId();
 
   try {
     const url = new URL(request.url);
     const code = url.searchParams.get("code");
-    const state = url.searchParams.get("state");
     const cognitoError = url.searchParams.get("error");
     const cognitoErrorDescription = url.searchParams.get("error_description");
     const sessionId = createSessionId();
-
-    let expectedNonce: string | undefined;
 
     logDebug("Cognito callback received.", {
       correlationId,
       event: "cognito.callback.received",
       hasCode: Boolean(code),
       hasError: Boolean(cognitoError),
-      hasState: Boolean(state),
       stage: "cognito_callback",
     });
-
-    if (state) {
-      const oauthState = await consumeOAuthState(state);
-
-      if (!oauthState) {
-        logWarn("Cognito state is invalid or expired.", {
-          correlationId,
-          event: "cognito.state.invalid",
-          stage: "state_validation",
-        });
-
-        return saveAndRedirect({
-          correlationId,
-          error: "invalid_or_expired_state",
-          sessionId,
-          stage: "state_validation",
-        });
-      }
-
-      correlationId = oauthState.correlationId;
-      expectedNonce = oauthState.nonce;
-
-      logDebug("Cognito state consumed successfully.", {
-        correlationId,
-        event: "cognito.state.validated",
-        stage: "state_validation",
-      });
-    }
 
     if (cognitoError) {
       logWarn("Cognito returned an OAuth error.", {
@@ -176,7 +143,6 @@ export async function GET(request: NextRequest) {
     const tokenExchangeResult = await invokeCognitoTokenExchange({
       code,
       correlationId,
-      expectedNonce,
       redirectUri: config.cognitoRedirectUri,
     });
 

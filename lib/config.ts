@@ -104,26 +104,9 @@ function readLogLevelEnv(name: string, fallback: LogLevel): LogLevel {
 export const config = {
   awsRegion: readEnv("AWS_REGION"),
   bridgeBaseUrl: readUrlEnv("BRIDGE_BASE_URL", "http://localhost:3000"),
-  cognitoDomain: readUrlEnv(
-    "COGNITO_DOMAIN",
-    "https://loginstaging.toyota.cl",
-  ),
-  cognitoClientId: readEnv(
-    "COGNITO_CLIENT_ID",
-    "4lnjhfjhs73u5k1v72h9jk1rnr",
-  ),
   cognitoRedirectUri: readUrlEnv(
     "COGNITO_REDIRECT_URI",
     "http://localhost:3000/api/auth/cognito/callback",
-  ),
-  cognitoScopes: readEnv(
-    "COGNITO_SCOPES",
-    "aws.cognito.signin.user.admin email openid",
-  ),
-  cognitoStateTtlSeconds: readIntegerEnv(
-    "COGNITO_STATE_TTL_SECONDS",
-    300,
-    { min: 60, max: 900 },
   ),
   bridgeSessionTtlSeconds: readIntegerEnv(
     "BRIDGE_SESSION_TTL_SECONDS",
