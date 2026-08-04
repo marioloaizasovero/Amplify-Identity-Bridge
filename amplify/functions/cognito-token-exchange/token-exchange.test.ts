@@ -11,7 +11,7 @@ const validEvent = {
   code: "valid-authorization-code",
   correlationId: "0123456789abcdef0123456789abcdef",
   redirectUri: "https://bridge.example.com/api/auth/cognito/callback",
-} satisfies Required<TokenExchangeEvent>;
+} satisfies TokenExchangeEvent;
 
 const validPayload: JWTPayload = {
   sub: "user-123",
@@ -230,6 +230,44 @@ test("does not expose JWT verification error details", async () => {
   assert.equal(result.ok, false);
   assert.equal(result.error, "token_validation_failed");
   assert.equal("detail" in result, false);
+});
+
+test("validates the nonce when the bridge initiated Cognito", async () => {
+  const expectedNonce = "0123456789abcdef0123456789abcdef";
+  const result = await processTokenExchange(
+    {
+      ...validEvent,
+      expectedNonce,
+    },
+    lambdaContext,
+    createDependencies({
+      verifyIdToken: async () => ({
+        ...validPayload,
+        nonce: expectedNonce,
+      }),
+    }),
+  );
+
+  assert.equal(result.ok, true);
+});
+
+test("rejects an ID token with a different nonce", async () => {
+  const result = await processTokenExchange(
+    {
+      ...validEvent,
+      expectedNonce: "0123456789abcdef0123456789abcdef",
+    },
+    lambdaContext,
+    createDependencies({
+      verifyIdToken: async () => ({
+        ...validPayload,
+        nonce: "fedcba9876543210fedcba9876543210",
+      }),
+    }),
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "invalid_nonce");
 });
 
 test("rejects an ID token without the required claims", async () => {

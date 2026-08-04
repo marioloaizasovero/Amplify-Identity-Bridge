@@ -3,6 +3,7 @@ import type { JWTPayload } from "jose";
 export type TokenExchangeEvent = {
   code?: unknown;
   correlationId?: unknown;
+  expectedNonce?: unknown;
   redirectUri?: unknown;
 };
 
@@ -194,7 +195,9 @@ export async function processTokenExchange(
 
   if (
     !isBoundedString(event.code, { min: 8, max: 8_192 }) ||
-    !isCorrelationId(correlationId)
+    !isCorrelationId(correlationId) ||
+    (event.expectedNonce !== undefined &&
+      !isBoundedString(event.expectedNonce, { min: 16, max: 512 }))
   ) {
     dependencies.logger.warn("Token exchange input format is invalid.", {
       ...logContext,
@@ -376,6 +379,23 @@ export async function processTokenExchange(
     return {
       ok: false as const,
       error: "invalid_token_use",
+      diagnostics,
+    };
+  }
+
+  if (
+    typeof event.expectedNonce === "string" &&
+    payload.nonce !== event.expectedNonce
+  ) {
+    dependencies.logger.warn("Cognito ID token nonce is invalid.", {
+      ...logContext,
+      event: "lambda.id_token.invalid_nonce",
+      stage: "token_validation",
+    });
+
+    return {
+      ok: false as const,
+      error: "invalid_nonce",
       diagnostics,
     };
   }

@@ -10,18 +10,20 @@ function firstValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-export default function VtexSimulatorLoginPage({
+export default async function VtexSimulatorLoginPage({
   searchParams,
 }: {
-  searchParams: SearchParams;
+  searchParams: Promise<SearchParams>;
 }) {
   if (!config.enableVtexSimulator) {
     notFound();
   }
 
+  const resolvedSearchParams = await searchParams;
   const provider =
-    firstValue(searchParams.oAuthRedirect) ?? config.vtexOAuthProvider;
-  const returnUrl = firstValue(searchParams.returnUrl) ?? config.vtexReturnUrl;
+    firstValue(resolvedSearchParams.oAuthRedirect) ?? config.vtexOAuthProvider;
+  const returnUrl =
+    firstValue(resolvedSearchParams.returnUrl) ?? config.vtexReturnUrl;
 
   logInfo("VTEX simulator login page received bridge parameters.", {
     event: "vtex.simulator.login.received",

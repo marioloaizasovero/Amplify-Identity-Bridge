@@ -15,7 +15,8 @@ export default async function CognitoDebugPage() {
     notFound();
   }
 
-  const sessionId = cookies().get(getCognitoDebugSessionCookieName())?.value;
+  const cookieStore = await cookies();
+  const sessionId = cookieStore.get(getCognitoDebugSessionCookieName())?.value;
   const result = sessionId ? await consumeCognitoResult(sessionId) : null;
 
   logDebug("Cognito debug page requested.", {

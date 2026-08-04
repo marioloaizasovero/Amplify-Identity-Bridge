@@ -3,41 +3,30 @@ import { config } from "@/lib/config";
 import {
   bridgeSessionCookieName,
   bridgeSessionCookieOptions,
+  getPendingVtexAuthorizationCookieOptions,
+  pendingVtexAuthorizationCookieName,
 } from "@/lib/cookies";
 import {
-  createAuthorizationCode,
   createCorrelationId,
+  createNonce,
+  createOAuthState,
+  createPendingFlowId,
   hashOpaqueToken,
-  nowEpochSeconds,
 } from "@/lib/crypto";
+import { buildCognitoAuthorizationUrl } from "@/lib/cognito-authorization";
 import { logDebug, logError, logInfo, logWarn } from "@/lib/logger";
 import {
   consumeBridgeSession,
-  saveVtexAuthorizationCode,
+  getStateTtl,
+  savePendingVtexAuthorization,
 } from "@/lib/session-store";
 import {
   isAllowedVtexAuthorizationRequest,
-  vtexAuthorizationCodeTtlSeconds,
+  isValidOAuthState,
 } from "@/lib/vtex";
+import { completeVtexAuthorization } from "@/lib/vtex-authorization";
 
 export const dynamic = "force-dynamic";
-
-function oauthErrorRedirect(input: {
-  error: string;
-  errorDescription: string;
-  redirectUri: string;
-  state: string | null;
-}) {
-  const url = new URL(input.redirectUri);
-  url.searchParams.set("error", input.error);
-  url.searchParams.set("error_description", input.errorDescription);
-
-  if (input.state) {
-    url.searchParams.set("state", input.state);
-  }
-
-  return NextResponse.redirect(url);
-}
 
 export async function GET(request: NextRequest) {
   const startedAt = Date.now();
@@ -58,7 +47,10 @@ export async function GET(request: NextRequest) {
       stage: "vtex_authorize",
     });
 
-    if (!isAllowedVtexAuthorizationRequest({ clientId, redirectUri })) {
+    if (
+      !isAllowedVtexAuthorizationRequest({ clientId, redirectUri }) ||
+      !isValidOAuthState(state)
+    ) {
       logWarn("VTEX authorization request is invalid.", {
         clientId,
         correlationId,
@@ -70,7 +62,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         {
           error: "invalid_request",
-          error_description: "Invalid client_id or redirect_uri.",
+          error_description:
+            "Invalid client_id, redirect_uri or state.",
         },
         {
           headers: { "Cache-Control": "no-store" },
@@ -83,46 +76,61 @@ export async function GET(request: NextRequest) {
     const session = sessionId ? await consumeBridgeSession(sessionId) : null;
 
     if (!session) {
-      logWarn("VTEX authorization has no valid bridge session.", {
+      const flowId = createPendingFlowId();
+      const cognitoState = createOAuthState();
+      const nonce = createNonce();
+
+      await savePendingVtexAuthorization({
+        clientId: config.vtexClientId,
+        cognitoStateHash: hashOpaqueToken(cognitoState),
         correlationId,
-        event: "vtex.authorization.login_required",
-        hasSessionCookie: Boolean(sessionId),
-        stage: "bridge_session",
+        flowIdHash: hashOpaqueToken(flowId),
+        nonce,
+        redirectUri: config.vtexAllowedRedirectUri,
+        ttl: getStateTtl(),
+        vtexState: state,
       });
 
-      return oauthErrorRedirect({
-        error: "login_required",
-        errorDescription: "A valid Cognito bridge session is required.",
-        redirectUri: config.vtexAllowedRedirectUri,
-        state,
+      const cognitoAuthorizationUrl = buildCognitoAuthorizationUrl({
+        clientId: config.cognitoClientId,
+        domain: config.cognitoDomain,
+        nonce,
+        redirectUri: config.cognitoRedirectUri,
+        scopes: config.cognitoScopes,
+        state: cognitoState,
       });
+      const response = NextResponse.redirect(cognitoAuthorizationUrl);
+      response.cookies.set(
+        pendingVtexAuthorizationCookieName,
+        flowId,
+        getPendingVtexAuthorizationCookieOptions(
+          config.oauthStateTtlSeconds,
+        ),
+      );
+      response.headers.set("Cache-Control", "no-store");
+
+      logInfo("VTEX authorization redirected to Cognito.", {
+        correlationId,
+        event: "vtex.authorization.cognito_redirect",
+        hasSessionCookie: Boolean(sessionId),
+        stage: "cognito_authorization",
+      });
+
+      return response;
     }
 
     correlationId = session.correlationId;
-    const code = createAuthorizationCode();
-
-    await saveVtexAuthorizationCode({
+    const response = await completeVtexAuthorization({
       claims: session.claims,
       clientId: config.vtexClientId,
-      codeHash: hashOpaqueToken(code),
       correlationId,
       redirectUri: config.vtexAllowedRedirectUri,
-      ttl: nowEpochSeconds() + vtexAuthorizationCodeTtlSeconds,
+      state,
     });
-
-    const callbackUrl = new URL(config.vtexAllowedRedirectUri);
-    callbackUrl.searchParams.set("code", code);
-
-    if (state) {
-      callbackUrl.searchParams.set("state", state);
-    }
-
-    const response = NextResponse.redirect(callbackUrl);
     response.cookies.set(bridgeSessionCookieName, "", {
       ...bridgeSessionCookieOptions,
       maxAge: 0,
     });
-    response.headers.set("Cache-Control", "no-store");
 
     logInfo("VTEX authorization code created.", {
       correlationId,
