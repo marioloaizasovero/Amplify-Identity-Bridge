@@ -104,15 +104,23 @@ function readLogLevelEnv(name: string, fallback: LogLevel): LogLevel {
 export const config = {
   awsRegion: readEnv("AWS_REGION"),
   bridgeBaseUrl: readUrlEnv("BRIDGE_BASE_URL", "http://localhost:3000"),
+  cognitoDomain: readUrlEnv(
+    "COGNITO_DOMAIN",
+    "https://example.auth.us-east-1.amazoncognito.com",
+  ),
+  cognitoClientId: readEnv(
+    "COGNITO_CLIENT_ID",
+    "dummy-cognito-client-id",
+  ),
   cognitoRedirectUri: readUrlEnv(
     "COGNITO_REDIRECT_URI",
     "http://localhost:3000/api/auth/cognito/callback",
   ),
-    cognitoStateTtlSeconds: readIntegerEnv(
-    "COGNITO_STATE_TTL_SECONDS",
-    300,
-    { min: 60, max: 900 },
+  cognitoScopes: readEnv(
+    "COGNITO_SCOPES",
+    "openid email profile",
   ),
+  oauthStateTtlSeconds: 300,
   bridgeSessionTtlSeconds: readIntegerEnv(
     "BRIDGE_SESSION_TTL_SECONDS",
     900,
@@ -121,6 +129,10 @@ export const config = {
   enableCognitoDebug: readBooleanEnv(
     "ENABLE_COGNITO_DEBUG",
     process.env.NODE_ENV !== "production",
+  ),
+  enableVtexCredentialGenerator: readBooleanEnv(
+    "ENABLE_VTEX_CREDENTIAL_GENERATOR",
+    false,
   ),
   enableVtexSimulator: readBooleanEnv("ENABLE_VTEX_SIMULATOR", false),
   logLevel: readLogLevelEnv("LOG_LEVEL", "info"),

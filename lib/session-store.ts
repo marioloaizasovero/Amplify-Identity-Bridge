@@ -271,11 +271,84 @@ export async function consumeCognitoResult(sessionId: string) {
 }
 
 export function getStateTtl() {
-  return nowEpochSeconds() + config.cognitoStateTtlSeconds;
+  return nowEpochSeconds() + config.oauthStateTtlSeconds;
 }
 
 export function getSessionTtl() {
   return nowEpochSeconds() + config.bridgeSessionTtlSeconds;
+}
+
+export async function savePendingVtexAuthorization(input: {
+  clientId: string;
+  cognitoStateHash: string;
+  correlationId: string;
+  flowIdHash: string;
+  nonce: string;
+  redirectUri: string;
+  ttl: number;
+  vtexState: string;
+}) {
+  await getDynamoClient().send(
+    new PutCommand({
+      TableName: getTableName(),
+      Item: {
+        pk: `vtex-pending#${input.flowIdHash}`,
+        sk: "authorization-request",
+        clientId: input.clientId,
+        cognitoStateHash: input.cognitoStateHash,
+        correlationId: input.correlationId,
+        nonce: input.nonce,
+        redirectUri: input.redirectUri,
+        ttl: input.ttl,
+        vtexState: input.vtexState,
+        createdAt: new Date().toISOString(),
+      },
+      ConditionExpression: "attribute_not_exists(pk)",
+    }),
+  );
+}
+
+export async function consumePendingVtexAuthorization(input: {
+  cognitoStateHash: string;
+  flowIdHash: string;
+}) {
+  try {
+    const result = await getDynamoClient().send(
+      new DeleteCommand({
+        TableName: getTableName(),
+        Key: {
+          pk: `vtex-pending#${input.flowIdHash}`,
+          sk: "authorization-request",
+        },
+        ConditionExpression:
+          "#ttl > :now AND cognitoStateHash = :cognitoStateHash",
+        ExpressionAttributeNames: {
+          "#ttl": "ttl",
+        },
+        ExpressionAttributeValues: {
+          ":cognitoStateHash": input.cognitoStateHash,
+          ":now": nowEpochSeconds(),
+        },
+        ReturnValues: "ALL_OLD",
+      }),
+    );
+
+    const clientId = optionalString(result.Attributes?.clientId);
+    const correlationId = optionalString(result.Attributes?.correlationId);
+    const nonce = optionalString(result.Attributes?.nonce);
+    const redirectUri = optionalString(result.Attributes?.redirectUri);
+    const vtexState = optionalString(result.Attributes?.vtexState);
+
+    return clientId && correlationId && nonce && redirectUri && vtexState
+      ? { clientId, correlationId, nonce, redirectUri, vtexState }
+      : null;
+  } catch (error) {
+    if (isConditionalCheckFailure(error)) {
+      return null;
+    }
+
+    throw error;
+  }
 }
 
 export async function saveBridgeSession(input: {

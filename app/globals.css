@@ -109,6 +109,18 @@ body {
   margin-top: 24px;
 }
 
+.start-note {
+  margin-top: 16px !important;
+}
+
+.start-note code {
+  margin-left: 4px;
+  font-family:
+    Consolas,
+    "Courier New",
+    monospace;
+}
+
 .primary-button {
   display: inline-flex;
   align-items: center;
@@ -126,6 +138,101 @@ body {
 
 .primary-button:hover {
   background: #b81118;
+}
+
+.primary-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.credential-panel {
+  width: min(100%, 820px);
+}
+
+.credential-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.credential-form label {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.credential-form select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  padding: 11px 12px;
+  color: var(--foreground);
+  font: inherit;
+}
+
+.credential-form .primary-button {
+  justify-self: start;
+  margin-top: 8px;
+}
+
+.credential-result {
+  margin-top: 30px;
+  border-top: 1px solid var(--border);
+  padding-top: 24px;
+}
+
+.credential-result h2,
+.credential-result h3 {
+  margin: 0 0 12px;
+}
+
+.credential-result h3 {
+  margin-top: 24px;
+  font-size: 1rem;
+}
+
+.credential-field dd {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.credential-field code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.copy-button {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #fff;
+  cursor: pointer;
+  padding: 6px 10px;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.credential-config {
+  margin: 0;
+  border-radius: 6px;
+  background: #111827;
+  padding: 16px;
+  overflow-x: auto;
+  color: #f8fafc;
+  font-family:
+    Consolas,
+    "Courier New",
+    monospace;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .status-success {

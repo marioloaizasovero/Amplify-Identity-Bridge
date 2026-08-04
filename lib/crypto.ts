@@ -23,6 +23,14 @@ export function createCorrelationId() {
   return randomBytes(16).toString("hex");
 }
 
+export function createOAuthState() {
+  return randomOpaqueToken(32);
+}
+
+export function createPendingFlowId() {
+  return randomOpaqueToken(32);
+}
+
 export function createAuthorizationCode() {
   return randomOpaqueToken(64);
 }

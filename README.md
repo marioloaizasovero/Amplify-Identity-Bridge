@@ -1,7 +1,7 @@
 # Amplify Identity Bridge
 
 Puente OAuth entre Amazon Cognito y una tienda VTEX. La aplicación está
-construida con Next.js 14 y utiliza AWS Amplify Gen 2 para desplegar una
+construida con Next.js 15 y utiliza AWS Amplify Gen 2 para desplegar una
 función Lambda y una tabla DynamoDB.
 
 ## Estado actual
@@ -62,6 +62,19 @@ Sesión VTEX
 
 ## Flujos de autenticación
 
+### 0. Inicio silencioso desde la página del bridge
+
+1. El usuario abre `GET /start` y selecciona **Continuar con Cognito**.
+2. El navegador abre directamente el endpoint Cognito `/oauth2/authorize` con
+   `response_type=code`, el callback del bridge y `prompt=none`.
+3. Si existe una sesión Cognito vigente, Cognito retorna un authorization code
+   al callback y continúa el flujo normal.
+4. Si no existe una sesión, Cognito retorna `login_required` sin mostrar una
+   pantalla de credenciales.
+
+La página no utiliza una API intermedia, no crea cookies y no escribe en
+DynamoDB. El Client Secret de Cognito nunca forma parte de la URL.
+
 ### 1. Callback de Cognito
 
 1. El usuario inicia la autenticación directamente en Cognito.
@@ -78,14 +91,15 @@ Sesión VTEX
 
 1. VTEX solicita `GET /api/auth/vtex/authorize` con `client_id`, `state` y
    `redirect_uri`.
-2. El bridge valida exactamente el cliente y la URL de retorno.
-3. El bridge consume la sesión temporal asociada a la cookie.
-4. Genera un authorization code aleatorio de más de 64 caracteres.
-5. Guarda solamente su hash SHA-256 durante cinco minutos.
-6. Redirige a VTEX con `code` y el mismo `state`.
-
-Si no existe una sesión válida del bridge, responde a VTEX con
-`error=login_required`.
+2. El bridge valida exactamente el cliente, la URL de retorno y el `state`.
+3. Si existe una sesión temporal, la consume y genera el authorization code.
+4. Si no existe, guarda la solicitud VTEX por cinco minutos y redirige a
+   Cognito con un `state` y `nonce` propios.
+5. El callback valida y consume la solicitud pendiente, y la Lambda verifica
+   el `nonce` del ID Token.
+6. El bridge genera un authorization code de más de 64 caracteres y guarda
+   solamente su hash SHA-256 durante cinco minutos.
+7. Redirige a VTEX con `code` y exactamente el `state` original de VTEX.
 
 ### 3. Intercambio del código
 
@@ -126,17 +140,17 @@ desactivado en VTEX.
 | --- | --- |
 | Login iniciado en Cognito y continuación automática hacia VTEX | Implementado |
 | Login iniciado en VTEX cuando ya existe una sesión temporal del bridge | Implementado |
-| Login iniciado en VTEX sin una sesión previa del bridge | Pendiente |
+| Login iniciado en VTEX sin una sesión previa del bridge | Implementado |
 
-Para el escenario pendiente, `/api/auth/vtex/authorize` devuelve
-`login_required`. Una implementación futura deberá guardar la solicitud VTEX,
-redirigir a Cognito y retomarla después del callback, correlacionando el flujo
-mediante una cookie `HttpOnly` y un registro temporal en DynamoDB.
+La autorización pendiente se correlaciona mediante un `state` Cognito, una
+cookie `HttpOnly` de cinco minutos y un registro temporal en DynamoDB. El
+registro se consume atómicamente y no puede reutilizarse.
 
 ## Rutas vigentes
 
 | Método | Ruta | Uso |
 | --- | --- | --- |
+| `GET` | `/start` | Página con acceso directo a Cognito usando `prompt=none`. |
 | `GET` | `/api/auth/cognito/callback` | Callback registrado en Cognito. |
 | `GET` | `/api/auth/vtex/authorize` | Authorization endpoint consumido por VTEX. |
 | `POST` | `/api/auth/vtex/token` | Intercambia el código por un access token. |
@@ -147,6 +161,7 @@ mediante una cookie `HttpOnly` y un registro temporal en DynamoDB.
 | `GET` | `/api/vtex-simulator/authorize` | Inicia la autorización desde la tienda simulada. |
 | `GET` | `/api/vtex-simulator/callback` | Recibe el código y consume token y userinfo como lo haría VTEX. |
 | `GET` | `/vtex-simulator/result` | Muestra la línea de tiempo y los datos recibidos por la tienda. |
+| `GET` | `/vtex-credentials` | Genera credenciales OAuth para registrar en VTEX cuando la función está habilitada. |
 | `GET` | `/vtex/error` | Página provisional para errores controlados. |
 
 ## Configuración en VTEX
@@ -284,7 +299,10 @@ Para una compilación de producción se requieren:
 
 ```text
 BRIDGE_BASE_URL
+COGNITO_CLIENT_ID
+COGNITO_DOMAIN
 COGNITO_REDIRECT_URI
+COGNITO_SCOPES
 BRIDGE_SESSION_TTL_SECONDS
 VTEX_CLIENT_ID
 VTEX_CLIENT_SECRET
@@ -296,8 +314,9 @@ VTEX_RETURN_URL
 
 `AWS_REGION` es proporcionada por AWS durante el despliegue.
 `ENABLE_COGNITO_DEBUG` es opcional y su valor predeterminado en producción es
-`false`. `ENABLE_VTEX_SIMULATOR` también es opcional, está deshabilitado de
-forma predeterminada y debe habilitarse únicamente en ambientes de prueba.
+`false`. `ENABLE_VTEX_CREDENTIAL_GENERATOR` y `ENABLE_VTEX_SIMULATOR` también
+son opcionales, están deshabilitados de forma predeterminada y deben
+habilitarse únicamente en ambientes de prueba.
 `LOG_LEVEL` es opcional y su valor predeterminado es `info`. Los valores
 aceptados son `error`, `warn`, `info` y `debug`.
 
@@ -305,9 +324,13 @@ Valores de referencia para desarrollo:
 
 ```text
 BRIDGE_BASE_URL=https://dummy-dev.bridge-vtex.toyota.cl
+COGNITO_CLIENT_ID=<app-client-id>
+COGNITO_DOMAIN=https://<dominio-cognito>
 COGNITO_REDIRECT_URI=https://dummy-dev.bridge-vtex.toyota.cl/api/auth/cognito/callback
+COGNITO_SCOPES=openid email profile
 BRIDGE_SESSION_TTL_SECONDS=900
 ENABLE_COGNITO_DEBUG=false
+ENABLE_VTEX_CREDENTIAL_GENERATOR=false
 ENABLE_VTEX_SIMULATOR=false
 LOG_LEVEL=info
 VTEX_ALLOWED_REDIRECT_URI=https://vtexid.vtex.com.br/VtexIdAuthSiteKnockout/ReceiveAuthorizationCode.ashx
@@ -324,6 +347,7 @@ runtime.
 | Registro | Uso | Lectura |
 | --- | --- | --- |
 | `bridge-session#<id>` | Claims validados y `correlationId` usados para autorizar a VTEX. | Consumo atómico |
+| `vtex-pending#<hash>` | Solicitud VTEX pendiente, `state`, `nonce` y correlación con Cognito. | Consumo atómico |
 | `vtex-code#<hash>` | Authorization code de cinco minutos con su `correlationId`. | Consumo atómico |
 | `vtex-token#<hash>` | Access token de 15 minutos con su `correlationId`. | Lectura con validación de TTL |
 | `session#<id>` | Resultado temporal, última etapa y diagnóstico de Lambda. | Consumo atómico |
@@ -341,11 +365,13 @@ Con:
 ENABLE_COGNITO_DEBUG=true
 ```
 
-el callback termina en `/cognito-debug` y no continúa automáticamente hacia
-VTEX. La página consume el resultado temporal y deja de estar disponible
-cuando el modo debug está deshabilitado. Muestra el resultado de validación,
-los claims utilizados por el bridge, la última etapa, el `correlationId`, el
-request ID de Lambda y los metadatos no sensibles del token.
+el flujo directo desde Cognito termina en `/cognito-debug` y no continúa
+automáticamente hacia VTEX. La página consume el resultado temporal y deja de
+estar disponible cuando el modo debug está deshabilitado. Muestra el resultado
+de validación, los claims utilizados por el bridge, la última etapa, el
+`correlationId`, el request ID de Lambda y los metadatos no sensibles del
+token. El flujo iniciado por VTEX continúa hacia su callback para no romper la
+sesión OAuth pendiente.
 
 Los logs de la aplicación y de Lambda se escriben como JSON e incluyen
 `event`, `stage` y `correlationId`. Para investigar un flujo:
@@ -375,6 +401,8 @@ cognito.token_exchange.started
 lambda.cognito_token_request.started
 lambda.token_validation.completed
 cognito.flow.completed
+vtex.authorization.cognito_redirect
+vtex.authorization.resumed
 vtex.authorization.completed
 vtex.token.completed
 vtex.userinfo.completed
@@ -418,8 +446,8 @@ VTEX_OAUTH_PROVIDER=ToyotaCognitoTest
 VTEX_RETURN_URL=/
 ```
 
-La prueba debe iniciarse directamente desde la URL de Cognito configurada por
-Toyota.
+La prueba puede iniciarse desde `/start`. El botón abre directamente la URL de
+Cognito con `prompt=none`, por lo que requiere una sesión Cognito vigente.
 
 Al terminar, `/vtex-simulator/result` muestra:
 
@@ -434,6 +462,22 @@ El `VTEX_CLIENT_SECRET` se usa exclusivamente en el callback del servidor. El
 access token se mantiene en memoria durante la llamada a `userinfo`; no se
 guarda en el registro del simulador ni se envía a la página de resultados.
 Después de cambiar estas variables es necesario desplegar nuevamente.
+
+## Generador de credenciales VTEX
+
+La página `/vtex-credentials` genera en el servidor el nombre del proveedor,
+el Client ID y un Client secret de 48 bytes para los ambientes `dev`, `qa`,
+`stage` y `prod`. Para habilitarla temporalmente:
+
+```text
+ENABLE_VTEX_CREDENTIAL_GENERATOR=true
+```
+
+Los valores se generan con `crypto.randomBytes`, se muestran una sola vez y no
+se guardan en DynamoDB, cookies, URLs, Local Storage o logs. Deben copiarse al
+proveedor OAuth de VTEX y a las variables correspondientes de Amplify. Después
+de utilizarlos, se debe volver a configurar la variable en `false` y desplegar
+el ambiente nuevamente.
 
 ## Desarrollo local
 

@@ -15,7 +15,8 @@ export default async function VtexSimulatorResultPage() {
     notFound();
   }
 
-  const sessionId = cookies().get(vtexSimulatorSessionCookieName)?.value;
+  const cookieStore = await cookies();
+  const sessionId = cookieStore.get(vtexSimulatorSessionCookieName)?.value;
   const result = sessionId
     ? await getVtexSimulatorResult(sessionId)
     : null;
@@ -111,7 +112,7 @@ export default async function VtexSimulatorResultPage() {
         )}
 
         <div className="simulator-actions">
-          <a className="primary-button" href="/api/auth/cognito/start">
+          <a className="primary-button" href="/start">
             Iniciar una nueva prueba
           </a>
         </div>

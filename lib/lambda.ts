@@ -42,6 +42,7 @@ function isCognitoResult(value: unknown): value is CognitoResult {
 export async function invokeCognitoTokenExchange(input: {
   code: string;
   correlationId: string;
+  expectedNonce?: string;
   redirectUri: string;
 }): Promise<CognitoResult> {
   const response = await getLambdaClient().send(

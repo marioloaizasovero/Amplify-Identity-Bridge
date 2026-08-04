@@ -23,6 +23,10 @@ export function isAllowedVtexAuthorizationRequest(input: {
   );
 }
 
+export function isValidOAuthState(state: string | null): state is string {
+  return Boolean(state && state.length >= 16 && state.length <= 2_048);
+}
+
 export function validateVtexClientCredentials(input: {
   clientId: string;
   clientSecret: string;
