@@ -270,6 +270,10 @@ export async function consumeCognitoResult(sessionId: string) {
   }
 }
 
+export function getStateTtl() {
+  return nowEpochSeconds() + config.cognitoStateTtlSeconds;
+}
+
 export function getSessionTtl() {
   return nowEpochSeconds() + config.bridgeSessionTtlSeconds;
 }

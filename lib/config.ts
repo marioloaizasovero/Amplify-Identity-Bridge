@@ -108,6 +108,11 @@ export const config = {
     "COGNITO_REDIRECT_URI",
     "http://localhost:3000/api/auth/cognito/callback",
   ),
+    cognitoStateTtlSeconds: readIntegerEnv(
+    "COGNITO_STATE_TTL_SECONDS",
+    300,
+    { min: 60, max: 900 },
+  ),
   bridgeSessionTtlSeconds: readIntegerEnv(
     "BRIDGE_SESSION_TTL_SECONDS",
     900,
