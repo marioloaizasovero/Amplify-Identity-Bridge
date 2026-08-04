@@ -6,6 +6,13 @@ export function randomOpaqueToken(byteLength = 32) {
   }
 
   return randomBytes(byteLength).toString("base64url");
+} 
+export function createState() {
+  return randomOpaqueToken(32);
+}
+
+export function createNonce() {
+  return randomOpaqueToken(32);
 }
 
 export function createSessionId() {
